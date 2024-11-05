@@ -1,9 +1,299 @@
 import tkinter as tk
+from tkinter import ttk
+import os
 
-# Create the main window
-window = tk.Tk()
-window.title("My Window")
-window.geometry("400x300")  # Width x Height
+class TodoApp:
+    def __init__(self):
+        self.root = tk.Tk()
+        self.root.title("Task Manager")
+        self.root.geometry("800x600")
+        
+        # Create text files if they don't exist
+        self.create_files()
+        
+        # Store update scheduler IDs
+        self.task_update_id = None
+        self.trash_update_id = None
+        
+        self.create_welcome_page()
 
-# Run the main loop
-window.mainloop()
+    def create_files(self):
+        # Create ToDo.txt if it doesn't exist
+        if not os.path.exists("ToDo.txt"):
+            with open("ToDo.txt", "w") as f:
+                f.write("")
+        
+        # Create Trash.txt if it doesn't exist
+        if not os.path.exists("Trash.txt"):
+            with open("Trash.txt", "w") as f:
+                f.write("")
+
+    def cancel_updates(self):
+        # Cancel any pending updates
+        if self.task_update_id:
+            self.root.after_cancel(self.task_update_id)
+            self.task_update_id = None
+        if self.trash_update_id:
+            self.root.after_cancel(self.trash_update_id)
+            self.trash_update_id = None
+
+    def create_welcome_page(self):
+        self.cancel_updates()
+        # Clear any existing widgets
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # Center the content
+        welcome_frame = ttk.Frame(self.root, padding="20")
+        welcome_frame.place(relx=0.5, rely=0.4, anchor="center")
+
+        # Welcome message
+        welcome_label = ttk.Label(
+            welcome_frame,
+            text="Task Manager: Add and Manage Tasks to Aid Productivity",
+            font=("Arial", 16)
+        )
+        welcome_label.pack(pady=20)
+
+        # Continue button
+        continue_btn = ttk.Button(
+            welcome_frame,
+            text="Continue",
+            command=self.create_main_page
+        )
+        continue_btn.pack()
+
+    def update_task_list(self, text_widget):
+        try:
+            with open("ToDo.txt", "r") as f:
+                content = f.read()
+            
+            # Only update if the widget still exists
+            if text_widget.winfo_exists():
+                text_widget.config(state='normal')
+                text_widget.delete(1.0, tk.END)
+                text_widget.insert(tk.END, content)
+                text_widget.config(state='disabled')
+                # Schedule next update
+                self.task_update_id = self.root.after(1000, lambda: self.update_task_list(text_widget))
+        except Exception as e:
+            pass  # Silently handle widget destruction
+
+    def update_trash_list(self, text_widget):
+        try:
+            with open("Trash.txt", "r") as f:
+                content = f.read()
+            
+            # Only update if the widget still exists
+            if text_widget.winfo_exists():
+                text_widget.config(state='normal')
+                text_widget.delete(1.0, tk.END)
+                text_widget.insert(tk.END, content)
+                text_widget.config(state='disabled')
+                # Schedule next update
+                self.trash_update_id = self.root.after(1000, lambda: self.update_trash_list(text_widget))
+        except Exception as e:
+            pass  # Silently handle widget destruction
+
+    def create_main_page(self):
+        self.cancel_updates()
+        # Clear existing widgets
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # Main container
+        main_frame = ttk.Frame(self.root, padding="10")
+        main_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Left side - Options
+        options_frame = ttk.LabelFrame(main_frame, text="Options", padding="10")
+        options_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+
+        # Option buttons
+        option_buttons = ["Add Task", "Remove Task", "Change Task Order", "View Trash"]
+        for button_text in option_buttons:
+            button = ttk.Button(
+                options_frame,
+                text=button_text,
+                width=20,
+                command=self.view_trash if button_text == "View Trash" else None
+            )
+            button.pack(pady=5)
+
+        # Add Help button inside options frame with separator
+        ttk.Separator(options_frame, orient='horizontal').pack(fill='x', pady=15)
+        help_btn = ttk.Button(
+            options_frame,
+            text="Help",
+            width=20,
+            command=self.create_help_page
+        )
+        help_btn.pack(side=tk.BOTTOM, pady=5)
+
+        # Right side - Task list
+        task_frame = ttk.Frame(main_frame, padding="10")
+        task_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # Add "To-Do List" label
+        todo_label = ttk.Label(
+            task_frame,
+            text="To-Do List",
+            font=("Arial", 12, "bold")
+        )
+        todo_label.pack(anchor=tk.W, pady=(0, 5))
+
+        # Create text widget for tasks with scrollbar
+        task_text = tk.Text(
+            task_frame,
+            wrap=tk.WORD,
+            relief=tk.SUNKEN,
+            borderwidth=1,
+            state='disabled'
+        )
+        task_scrollbar = ttk.Scrollbar(task_frame, orient="vertical", command=task_text.yview)
+        task_text.configure(yscrollcommand=task_scrollbar.set)
+        
+        task_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        task_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Start updating task list
+        self.update_task_list(task_text)
+
+    def create_help_page(self):
+        self.cancel_updates()
+        # Clear existing widgets
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # Main container
+        help_frame = ttk.Frame(self.root, padding="20")
+        help_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Help title
+        help_title = ttk.Label(
+            help_frame,
+            text="Task Manager Help Guide",
+            font=("Arial", 16, "bold")
+        )
+        help_title.pack(pady=(0, 20))
+
+        # Help text
+        help_text = """
+Main Page Options:
+• Add Task: Allows you to create a new task with a title and optional priority level.
+• Remove Task: Moves the selected task to the trash bin for potential recovery or deletion.
+• Change Task Order: Enables reordering of tasks based on priority level
+• View Trash: Opens the trash page where removed tasks are stored.
+
+Trash Page Options:
+• Restore Task: Moves the selected task back to the main To-Do list.
+• Clear Trash: Permanently deletes all tasks in the trash.
+• Done: Returns to the main To-Do list page.
+
+Additional Features:
+• Tasks can be prioritized and organized according to priority
+• Removed tasks can be recovered from the trash if needed
+• The program maintains a clean and efficient interface for easy task management
+• Contents are saved to text files to prevent information loss on window closure
+"""
+
+        # Create text widget for help content with scrollbar
+        text_frame = ttk.Frame(help_frame)
+        text_frame.pack(fill=tk.BOTH, expand=True)
+        
+        text_widget = tk.Text(
+            text_frame,
+            wrap=tk.WORD,
+            font=("Arial", 11),
+            padx=10,
+            pady=10,
+            height=15
+        )
+        scrollbar = ttk.Scrollbar(text_frame, orient="vertical", command=text_widget.yview)
+        text_widget.configure(yscrollcommand=scrollbar.set)
+        
+        text_widget.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        # Insert help text
+        text_widget.insert(tk.END, help_text)
+        text_widget.configure(state='disabled')
+
+        # Back button
+        back_btn = ttk.Button(
+            help_frame,
+            text="Back",
+            command=self.create_main_page,
+            width=20
+        )
+        back_btn.pack(pady=20)
+
+    def view_trash(self):
+        self.cancel_updates()
+        # Clear existing widgets
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+        # Main container
+        trash_frame = ttk.Frame(self.root, padding="10")
+        trash_frame.pack(fill=tk.BOTH, expand=True)
+
+        # Left side - Options
+        options_frame = ttk.LabelFrame(trash_frame, text="Options", padding="10")
+        options_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
+
+        # Trash option buttons
+        trash_buttons = ["Restore Task", "Clear Trash"]
+        for button_text in trash_buttons:
+            button = ttk.Button(
+                options_frame,
+                text=button_text,
+                width=20
+            )
+            button.pack(pady=5)
+
+        # Add Done button inside options frame with some space above it
+        ttk.Separator(options_frame, orient='horizontal').pack(fill='x', pady=15)
+        done_btn = ttk.Button(
+            options_frame,
+            text="Done",
+            width=20,
+            command=self.create_main_page
+        )
+        done_btn.pack(side=tk.BOTTOM, pady=5)
+
+        # Right side - Trash list
+        trash_list_frame = ttk.Frame(trash_frame, padding="10")
+        trash_list_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+
+        # Add "Trash" label
+        trash_label = ttk.Label(
+            trash_list_frame,
+            text="Trash",
+            font=("Arial", 12, "bold")
+        )
+        trash_label.pack(anchor=tk.W, pady=(0, 5))
+
+        # Create text widget for trash with scrollbar
+        trash_text = tk.Text(
+            trash_list_frame,
+            wrap=tk.WORD,
+            relief=tk.SUNKEN,
+            borderwidth=1,
+            state='disabled'
+        )
+        trash_scrollbar = ttk.Scrollbar(trash_list_frame, orient="vertical", command=trash_text.yview)
+        trash_text.configure(yscrollcommand=trash_scrollbar.set)
+        
+        trash_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        trash_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+
+        # Start updating trash list
+        self.update_trash_list(trash_text)
+
+    def run(self):
+        self.root.mainloop()
+
+if __name__ == "__main__":
+    app = TodoApp()
+    app.run()
