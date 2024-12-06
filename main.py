@@ -1,6 +1,10 @@
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import os
+import requests
+import json
+import time
+import threading
 
 class TodoApp:
     def __init__(self):
@@ -12,6 +16,29 @@ class TodoApp:
         self.trash_update_id = None
         
         self.create_welcome_page()
+
+    
+    def empty_trash(self): ################### emptying trash: A
+        try:
+            response = requests.post(
+                'http://localhost:8080/empty-trashcan',
+                json={'trashcanPath': 'Trash.txt'},
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                # Clear the local trash file
+                with open("Trash.txt", "w") as f:
+                    f.write("")
+                messagebox.showinfo("Success", "Trash emptied successfully")
+                self.view_trash()  # Refresh the trash view
+            else:
+                messagebox.showerror("Error", f"Failed to empty trash: {response.json().get('message', 'Unknown error')}")
+                
+        except requests.exceptions.RequestException as e:
+            messagebox.showerror("Error", f"Could not connect to trash service: {str(e)}")
+        except Exception as e:
+            messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
 
     def create_files(self):
         if not os.path.exists("ToDo.txt"):
@@ -30,29 +57,83 @@ class TodoApp:
             self.root.after_cancel(self.trash_update_id)
             self.trash_update_id = None
 
-    def create_add_task_popup(self):
+    def create_add_task_popup(self):################################################## Adding task: B
         popup = tk.Toplevel(self.root)
         popup.title("Add Task")
         popup.geometry("400x200")
         popup.transient(self.root)
         popup.grab_set()
+
+        # Create frame for inputs
         input_frame = ttk.Frame(popup, padding="20")
         input_frame.pack(fill=tk.BOTH, expand=True)
 
+        # Priority Number entry
         priority_label = ttk.Label(input_frame, text="Optional Priority Number:")
         priority_label.pack(anchor=tk.W)
         priority_entry = ttk.Entry(input_frame, width=10)
         priority_entry.pack(anchor=tk.W, pady=(0, 10))
+
+        # Task Title entry
         title_label = ttk.Label(input_frame, text="Task Title:")
         title_label.pack(anchor=tk.W)
         title_entry = ttk.Entry(input_frame)
         title_entry.pack(fill=tk.X, pady=(0, 20))
+
+        def add_task():
+                priority = priority_entry.get().strip()
+                title = title_entry.get().strip()
+        
+                if not title:
+                    messagebox.showerror("Error", "Task title is required")
+                    return
+            
+                try:
+                    response = requests.post(
+                        'http://localhost:8081/add-task',
+                        json={
+                            'todoPath': 'ToDo.txt',
+                            'priority': int(priority) if priority else None,
+                            'taskTitle': title
+                        },
+                        timeout=5
+                    )
+            
+                    if response.status_code == 200:
+                        popup.destroy()
+                        messagebox.showinfo("Success", "Task added successfully")
+                    else:
+                        messagebox.showerror("Error", f"Failed to add task: {response.json().get('message', 'Unknown error')}")
+                
+                except requests.exceptions.RequestException as e:
+                    messagebox.showerror("Error", f"Could not connect to task service: {str(e)}")
+                except ValueError as e:
+                    if priority:
+                        messagebox.showerror("Error", "Priority must be a number")
+                    else:
+                        messagebox.showerror("Error", f"An error occurred: {str(e)}")
+                except Exception as e:
+                    messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
+
+            # Done button
         done_btn = ttk.Button(
             input_frame,
             text="Enter",
-            command=popup.destroy
+            command=add_task
         )
         done_btn.pack()
+
+
+
+
+
+
+
+
+
+
+
+
 
     def create_change_order_popup(self):
         popup = tk.Toplevel(self.root)
@@ -60,24 +141,87 @@ class TodoApp:
         popup.geometry("200x200")
         popup.transient(self.root)
         popup.grab_set()
+
+        # Create frame for inputs
         input_frame = ttk.Frame(popup, padding="20")
         input_frame.pack(fill=tk.BOTH, expand=True)
-        priority_label = ttk.Label(input_frame, text="Current Task Priority:")
-        priority_label.pack(anchor=tk.W)
-        priority_entry = ttk.Entry(input_frame, width=10)
-        priority_entry.pack(anchor=tk.W, pady=(0, 10))
-        title_label = ttk.Label(input_frame, text="New Task Priority:")
-        title_label.pack(anchor=tk.W)
-        title_entry = ttk.Entry(input_frame, width=10)
-        title_entry.pack(anchor=tk.W, pady=(0, 20))
 
+        # Current Priority entry
+        current_priority_label = ttk.Label(input_frame, text="Current Task Priority:")
+        current_priority_label.pack(anchor=tk.W)
+        current_priority_entry = ttk.Entry(input_frame, width=10)
+        current_priority_entry.pack(anchor=tk.W, pady=(0, 10))
 
+        # New Priority entry
+        new_priority_label = ttk.Label(input_frame, text="New Task Priority:")
+        new_priority_label.pack(anchor=tk.W)
+        new_priority_entry = ttk.Entry(input_frame, width=10)
+        new_priority_entry.pack(anchor=tk.W, pady=(0, 20))
+
+        def reorder_task():
+            current_priority = current_priority_entry.get().strip()
+            new_priority = new_priority_entry.get().strip()
+        
+            if not current_priority or not new_priority:
+                messagebox.showerror("Error", "Both priorities are required")
+                return
+            
+            try:
+                response = requests.post(
+                    'http://localhost:8083/reorder-task',
+                    json={
+                        'todoPath': 'ToDo.txt',
+                        'currentPriority': int(current_priority),
+                        'newPriority': int(new_priority)
+                    },
+                    timeout=5
+                )
+            
+                if response.status_code == 200:
+                    popup.destroy()
+                    messagebox.showinfo("Success", "Task reordered successfully")
+                else:
+                    error_message = "Unknown error"
+                    try:
+                        error_message = response.json().get('message', error_message)
+                    except:
+                        pass
+                    messagebox.showerror("Error", f"Failed to reorder task: {error_message}")
+                
+            except requests.exceptions.RequestException as e:
+                messagebox.showerror("Error", f"Could not connect to task reordering service: {str(e)}")
+            except ValueError:
+                messagebox.showerror("Error", "Both priorities must be valid numbers")
+            except Exception as e:
+                messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
+
+        # Done button
         done_btn = ttk.Button(
             input_frame,
             text="Enter",
-            command=popup.destroy
+            command=reorder_task
         )
         done_btn.pack()
+
+ 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def create_remove_task_popup(self):
         popup = tk.Toplevel(self.root)
@@ -86,20 +230,58 @@ class TodoApp:
         popup.transient(self.root)
         popup.grab_set()
 
+        # Create frame for content
         frame = ttk.Frame(popup, padding="20")
         frame.pack(fill=tk.BOTH, expand=True)
 
-
+        # Label and entry
         label = ttk.Label(frame, text="Enter task number to remove:")
         label.pack(anchor=tk.W)
         entry = ttk.Entry(frame)
         entry.pack(fill=tk.X, pady=(5, 20))
 
+        def remove_task():
+            task_number = entry.get().strip()
+        
+            if not task_number:
+                messagebox.showerror("Error", "Task number is required")
+                return
+            
+            try:
+                response = requests.post(
+                    'http://localhost:8082/move-task',
+                    json={
+                        'sourcePath': 'ToDo.txt',
+                        'targetPath': 'Trash.txt',
+                        'taskNumber': int(task_number),
+                        'direction': 'toTrash'
+                    },
+                    timeout=5
+                )
+            
+                if response.status_code == 200:
+                    popup.destroy()
+                    messagebox.showinfo("Success", "Task moved to trash successfully")
+                else:
+                    error_message = "Unknown error"
+                    try:
+                        error_message = response.json().get('message', error_message)
+                    except:
+                        pass
+                    messagebox.showerror("Error", f"Failed to remove task: {error_message}")
+                
+            except requests.exceptions.RequestException as e:
+                messagebox.showerror("Error", f"Could not connect to task movement service: {str(e)}")
+            except ValueError:
+                messagebox.showerror("Error", "Task number must be a valid number")
+            except Exception as e:
+                messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
 
+        # Done button
         done_btn = ttk.Button(
             frame,
             text="Enter",
-            command=popup.destroy
+            command=remove_task
         )
         done_btn.pack()
 
@@ -110,23 +292,86 @@ class TodoApp:
         popup.transient(self.root)
         popup.grab_set()
 
-
+        # Create frame for content
         frame = ttk.Frame(popup, padding="20")
         frame.pack(fill=tk.BOTH, expand=True)
 
-
+        # Label and entry
         label = ttk.Label(frame, text="Enter task number to restore:")
         label.pack(anchor=tk.W)
         entry = ttk.Entry(frame)
         entry.pack(fill=tk.X, pady=(5, 20))
 
+        def restore_task():
+            task_number = entry.get().strip()
+        
+            if not task_number:
+                messagebox.showerror("Error", "Task number is required")
+                return
+            
+            try:
+                response = requests.post(
+                    'http://localhost:8082/move-task',
+                    json={
+                        'sourcePath': 'Trash.txt',
+                        'targetPath': 'ToDo.txt',
+                        'taskNumber': int(task_number),
+                        'direction': 'fromTrash'
+                    },
+                    timeout=5
+                )
+            
+                if response.status_code == 200:
+                    popup.destroy()
+                    messagebox.showinfo("Success", "Task restored successfully")
+                else:
+                    error_message = "Unknown error"
+                    try:
+                        error_message = response.json().get('message', error_message)
+                    except:
+                        pass
+                    messagebox.showerror("Error", f"Failed to restore task: {error_message}")
+                
+            except requests.exceptions.RequestException as e:
+                messagebox.showerror("Error", f"Could not connect to task movement service: {str(e)}")
+            except ValueError:
+                messagebox.showerror("Error", "Task number must be a valid number")
+            except Exception as e:
+                messagebox.showerror("Error", f"An unexpected error occurred: {str(e)}")
 
+        # Done button
         done_btn = ttk.Button(
             frame,
             text="Enter",
-            command=popup.destroy
+            command=restore_task
         )
         done_btn.pack()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     def create_clear_trash_popup(self):
         popup = tk.Toplevel(self.root)
@@ -135,11 +380,11 @@ class TodoApp:
         popup.transient(self.root)
         popup.grab_set()
 
-   
+        # Create frame for content
         frame = ttk.Frame(popup, padding="20")
         frame.pack(fill=tk.BOTH, expand=True)
 
-
+        # Warning label
         warning_label = ttk.Label(
             frame,
             text="Are you sure you want to permanently delete all items in trash?",
@@ -147,19 +392,24 @@ class TodoApp:
         )
         warning_label.pack(pady=(0, 20))
 
-
+        # Buttons frame
         button_frame = ttk.Frame(frame)
         button_frame.pack()
 
+        def confirm_and_close():
+            self.empty_trash()
+            popup.destroy()
 
+        # Yes button (red)
         yes_btn = ttk.Button(
             button_frame,
             text="Yes: Permanently Delete All Trash",
-            style="Red.TButton"
+            style="Red.TButton",
+            command=confirm_and_close
         )
         yes_btn.pack(side=tk.LEFT, padx=5)
 
-
+        # Cancel button
         cancel_btn = ttk.Button(
             button_frame,
             text="Cancel",
@@ -167,6 +417,7 @@ class TodoApp:
         )
         cancel_btn.pack(side=tk.LEFT, padx=5)
 
+        # Create red button style
         style = ttk.Style()
         style.configure("Red.TButton", foreground="red")
 
@@ -226,6 +477,7 @@ class TodoApp:
         options_frame = ttk.LabelFrame(main_frame, text="Options", padding="10")
         options_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
 
+        # Updated button commands
         option_buttons = [
             ("Add Task", self.create_add_task_popup),
             ("Remove Task", self.create_remove_task_popup),
@@ -351,7 +603,7 @@ Additional Features:
         options_frame = ttk.LabelFrame(trash_frame, text="Options", padding="10")
         options_frame.pack(side=tk.LEFT, fill=tk.Y, padx=(0, 10))
 
-
+        # Updated trash buttons with commands
         trash_buttons = [
             ("Restore Task", self.create_restore_task_popup),
             ("Clear Trash", self.create_clear_trash_popup)
@@ -403,10 +655,9 @@ Additional Features:
     def run(self):
         self.root.mainloop()
 
+
+
 if __name__ == "__main__":
     app = TodoApp()
     app.run()
-
-
-
-    ###############
+    
